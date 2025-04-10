@@ -1,0 +1,25 @@
+[
+  {
+    "type": "pothole",
+    "lat": 19.076,
+    "lng": 72.8777,
+    "severity": "high"
+  },
+  {
+    "type": "speed_breaker",
+    "lat": 19.078,
+    "lng": 72.879
+  },
+  {
+    "lat": 53.3457602728654,
+    "lng": -6.235977003494347,
+    "type": "pothole",
+    "severity": "5"
+  },
+  {
+    "lat": 19.079770980596066,
+    "lng": 72.84673210178006,
+    "type": "speed_breaker",
+    "severity": "8"
+  }
+]

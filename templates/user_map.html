@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>User Road Safety Map</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    #map { height: 90vh; width: 100%; }
+    #routeForm {
+      margin: 10px;
+    }
+    input, button {
+      padding: 6px;
+      margin: 4px;
+    }
+  </style>
+</head>
+<body>
+  <h3>Route with Hazards & Your Location</h3>
+
+  <form id="routeForm">
+    <input type="text" id="start" placeholder="Start (e.g. Mumbai)" required />
+    <input type="text" id="end" placeholder="Destination (e.g. Pune)" required />
+    <button type="submit">Get Route</button>
+  </form>
+
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script>
+    let map;
+    let userLat = 19.0760, userLng = 72.8777;
+    let routeLayer;
+
+    const apiKey = "5b3ce3597851110001cf6248d8549b2641fe4b03a6b7c5b9cfed6757"; // OpenRouteService API Key
+
+    function initMap() {
+      map = L.map('map').setView([userLat, userLng], 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+      // User location marker
+      const userMarker = L.marker([userLat, userLng], { title: "You are here" }).addTo(map);
+      userMarker.bindPopup("<b>You are here</b>").openPopup();
+
+      // Load hazard markers
+      fetch('/api/hazards')
+        .then(res => res.json())
+        .then(hazards => {
+          hazards.forEach(h => {
+            const marker = L.marker([h.lat, h.lng]).addTo(map);
+            marker.bindPopup(`<b>${h.type.toUpperCase()}</b><br>Severity: ${h.severity}`);
+          });
+        });
+    }
+
+    // Accurate Geolocation
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(pos => {
+        userLat = pos.coords.latitude;
+        userLng = pos.coords.longitude;
+        console.log("User location:", userLat, userLng);
+        initMap();
+      }, error => {
+        console.warn("Geolocation error:", error.message);
+        initMap(); // fallback to default location
+      }, {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      });
+    } else {
+      alert("Geolocation not supported by this browser.");
+      initMap();
+    }
+
+    // Handle route search
+    document.getElementById('routeForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const start = document.getElementById('start').value;
+      const end = document.getElementById('end').value;
+
+      Promise.all([geocode(start), geocode(end)]).then(([startCoord, endCoord]) => {
+        if (!startCoord || !endCoord) {
+          alert("Could not find one or both locations.");
+          return;
+        }
+        getRoute(startCoord, endCoord);
+      });
+    });
+
+    // Geocode locations using Nominatim
+    function geocode(place) {
+      return fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(place)}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.length > 0) {
+            const lat = parseFloat(data[0].lat);
+            const lon = parseFloat(data[0].lon);
+            return [lon, lat]; // [lon, lat] for ORS
+          }
+          return null;
+        });
+    }
+
+    // Get route from OpenRouteService and draw it
+    function getRoute(startCoord, endCoord) {
+      const url = 'https://api.openrouteservice.org/v2/directions/driving-car/geojson';
+
+      fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': apiKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          coordinates: [startCoord, endCoord]
+        })
+      })
+      .then(response => {
+        if (!response.ok) throw new Error("Route fetch failed.");
+        return response.json();
+      })
+      .then(data => {
+        if (!data.features || !data.features[0]) {
+          alert("No route found.");
+          return;
+        }
+
+        const coords = data.features[0].geometry.coordinates.map(c => [c[1], c[0]]); // Convert to [lat, lon]
+        if (routeLayer) map.removeLayer(routeLayer);
+        routeLayer = L.polyline(coords, { color: 'blue', weight: 5 }).addTo(map);
+        map.fitBounds(routeLayer.getBounds());
+      })
+      .catch(err => {
+        console.error("Routing error:", err);
+        alert("Failed to fetch route. Check console for details.");
+      });
+    }
+  </script>
+</body>
+</html>

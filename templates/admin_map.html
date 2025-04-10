@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Admin Hazard Entry</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    #map { height: 95vh; width: 100%; }
+  </style>
+</head>
+<body>
+  <h3>Click on the map to add a road hazard</h3>
+  <div id="map"></div>
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script>
+    window.onload = function () {
+      const map = L.map('map').setView([19.0760, 72.8777], 14);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+      // Load existing hazards and add markers
+      fetch('/api/hazards')
+        .then(res => res.json())
+        .then(hazards => {
+          hazards.forEach(h => {
+            const marker = L.marker([h.lat, h.lng]).addTo(map);
+            marker.bindPopup(`<b>${h.type.toUpperCase()}</b><br>Severity: ${h.severity}`);
+          });
+        });
+
+      // Allow admin to click and add new hazard
+      map.on('click', function(e) {
+        const lat = e.latlng.lat;
+        const lng = e.latlng.lng;
+        const formHtml = `
+          <form onsubmit="submitHazard(event, ${lat}, ${lng})">
+            Type: <select id="type">
+              <option value="pothole">Pothole</option>
+              <option value="speed_breaker">Speed Breaker</option>
+            </select><br>
+            Severity: <input id="severity" type="text" required><br>
+            <button type="submit">Save</button>
+          </form>
+        `;
+        L.popup().setLatLng([lat, lng]).setContent(formHtml).openOn(map);
+      });
+
+      // Submit new hazard to backend
+      window.submitHazard = function(e, lat, lng) {
+        e.preventDefault();
+        const type = document.getElementById('type').value;
+        const severity = document.getElementById('severity').value;
+
+        fetch('/add_hazard', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ lat, lng, type, severity })
+        })
+        .then(res => res.json())
+        .then(data => {
+          alert("Hazard saved!");
+          location.reload();
+        });
+      };
+    };
+  </script>
+</body>
+</html>
