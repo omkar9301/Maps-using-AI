@@ -12,14 +12,35 @@
       padding: 6px;
       margin: 4px;
     }
+    .autocomplete-suggestions {
+      border: 1px solid #ccc;
+      max-height: 150px;
+      overflow-y: auto;
+      position: absolute;
+      background: white;
+      z-index: 1000;
+    }
+    .autocomplete-suggestions div {
+      padding: 6px;
+      cursor: pointer;
+    }
+    .autocomplete-suggestions div:hover {
+      background-color: #e0e0e0;
+    }
   </style>
 </head>
 <body>
   <h3>Route with Hazards & Your Location</h3>
 
-  <form id="routeForm">
-    <input type="text" id="start" placeholder="Start (e.g. Mumbai)" required />
-    <input type="text" id="end" placeholder="Destination (e.g. Pune)" required />
+  <form id="routeForm" autocomplete="off">
+    <div style="position:relative;">
+      <input type="text" id="start" placeholder="Start (e.g. Mumbai)" required />
+      <div id="start-suggestions" class="autocomplete-suggestions"></div>
+    </div>
+    <div style="position:relative;">
+      <input type="text" id="end" placeholder="Destination (e.g. Pune)" required />
+      <div id="end-suggestions" class="autocomplete-suggestions"></div>
+    </div>
     <button type="submit">Get Route</button>
   </form>
 
@@ -37,11 +58,9 @@
       map = L.map('map').setView([userLat, userLng], 13);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-      // User location marker
       const userMarker = L.marker([userLat, userLng], { title: "You are here" }).addTo(map);
       userMarker.bindPopup("<b>You are here</b>").openPopup();
 
-      // Load hazard markers
       fetch('/api/hazards')
         .then(res => res.json())
         .then(hazards => {
@@ -52,16 +71,14 @@
         });
     }
 
-    // Accurate Geolocation
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(pos => {
         userLat = pos.coords.latitude;
         userLng = pos.coords.longitude;
-        console.log("User location:", userLat, userLng);
         initMap();
       }, error => {
         console.warn("Geolocation error:", error.message);
-        initMap(); // fallback to default location
+        initMap();
       }, {
         enableHighAccuracy: true,
         timeout: 10000,
@@ -72,7 +89,6 @@
       initMap();
     }
 
-    // Handle route search
     document.getElementById('routeForm').addEventListener('submit', function(e) {
       e.preventDefault();
       const start = document.getElementById('start').value;
@@ -87,7 +103,6 @@
       });
     });
 
-    // Geocode locations using Nominatim
     function geocode(place) {
       return fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(place)}`)
         .then(res => res.json())
@@ -95,13 +110,12 @@
           if (data.length > 0) {
             const lat = parseFloat(data[0].lat);
             const lon = parseFloat(data[0].lon);
-            return [lon, lat]; // [lon, lat] for ORS
+            return [lon, lat];
           }
           return null;
         });
     }
 
-    // Get route from OpenRouteService and draw it
     function getRoute(startCoord, endCoord) {
       const url = 'https://api.openrouteservice.org/v2/directions/driving-car/geojson';
 
@@ -125,7 +139,7 @@
           return;
         }
 
-        const coords = data.features[0].geometry.coordinates.map(c => [c[1], c[0]]); // Convert to [lat, lon]
+        const coords = data.features[0].geometry.coordinates.map(c => [c[1], c[0]]);
         if (routeLayer) map.removeLayer(routeLayer);
         routeLayer = L.polyline(coords, { color: 'blue', weight: 5 }).addTo(map);
         map.fitBounds(routeLayer.getBounds());
@@ -135,6 +149,44 @@
         alert("Failed to fetch route. Check console for details.");
       });
     }
+
+    // Autocomplete feature
+    function setupAutocomplete(inputId, suggestionId) {
+      const input = document.getElementById(inputId);
+      const suggestionBox = document.getElementById(suggestionId);
+
+      input.addEventListener('input', () => {
+        const query = input.value;
+        if (query.length < 3) {
+          suggestionBox.innerHTML = '';
+          return;
+        }
+
+        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`)
+          .then(res => res.json())
+          .then(data => {
+            suggestionBox.innerHTML = '';
+            data.slice(0, 5).forEach(place => {
+              const div = document.createElement('div');
+              div.textContent = place.display_name;
+              div.addEventListener('click', () => {
+                input.value = place.display_name;
+                suggestionBox.innerHTML = '';
+              });
+              suggestionBox.appendChild(div);
+            });
+          });
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!suggestionBox.contains(e.target) && e.target !== input) {
+          suggestionBox.innerHTML = '';
+        }
+      });
+    }
+
+    setupAutocomplete('start', 'start-suggestions');
+    setupAutocomplete('end', 'end-suggestions');
   </script>
 </body>
 </html>
