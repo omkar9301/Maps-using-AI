@@ -5,13 +5,8 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <style>
     #map { height: 90vh; width: 100%; }
-    #routeForm {
-      margin: 10px;
-    }
-    input, button {
-      padding: 6px;
-      margin: 4px;
-    }
+    #routeForm { margin: 10px; }
+    input, button { padding: 6px; margin: 4px; }
     .autocomplete-suggestions {
       border: 1px solid #ccc;
       max-height: 150px;
@@ -42,6 +37,7 @@
       <div id="end-suggestions" class="autocomplete-suggestions"></div>
     </div>
     <button type="submit">Get Route</button>
+    <button type="button" id="startJourney">Start Journey</button>
   </form>
 
   <div id="map"></div>
@@ -51,8 +47,10 @@
     let map;
     let userLat = 19.0760, userLng = 72.8777;
     let routeLayer;
+    let hazardMarkers = [];
+    let journeyStarted = false;
 
-    const apiKey = "5b3ce3597851110001cf6248d8549b2641fe4b03a6b7c5b9cfed6757"; // OpenRouteService API Key
+    const apiKey = "5b3ce3597851110001cf6248d8549b2641fe4b03a6b7c5b9cfed6757";
 
     function initMap() {
       map = L.map('map').setView([userLat, userLng], 13);
@@ -67,6 +65,7 @@
           hazards.forEach(h => {
             const marker = L.marker([h.lat, h.lng]).addTo(map);
             marker.bindPopup(`<b>${h.type.toUpperCase()}</b><br>Severity: ${h.severity}`);
+            hazardMarkers.push({ lat: h.lat, lng: h.lng, type: h.type });
           });
         });
     }
@@ -101,6 +100,12 @@
         }
         getRoute(startCoord, endCoord);
       });
+    });
+
+    document.getElementById('startJourney').addEventListener('click', () => {
+      journeyStarted = true;
+      alert("Journey started! You will be alerted when near hazards.");
+      trackPosition();
     });
 
     function geocode(place) {
@@ -150,7 +155,6 @@
       });
     }
 
-    // Autocomplete feature
     function setupAutocomplete(inputId, suggestionId) {
       const input = document.getElementById(inputId);
       const suggestionBox = document.getElementById(suggestionId);
@@ -166,6 +170,14 @@
           .then(res => res.json())
           .then(data => {
             suggestionBox.innerHTML = '';
+            const currentLoc = document.createElement('div');
+            currentLoc.textContent = 'Use Current Location';
+            currentLoc.addEventListener('click', () => {
+              input.value = `${userLat}, ${userLng}`;
+              suggestionBox.innerHTML = '';
+            });
+            suggestionBox.appendChild(currentLoc);
+
             data.slice(0, 5).forEach(place => {
               const div = document.createElement('div');
               div.textContent = place.display_name;
@@ -183,6 +195,39 @@
           suggestionBox.innerHTML = '';
         }
       });
+    }
+
+    function trackPosition() {
+      if (navigator.geolocation && journeyStarted) {
+        navigator.geolocation.watchPosition(pos => {
+          const currentLat = pos.coords.latitude;
+          const currentLng = pos.coords.longitude;
+
+          hazardMarkers.forEach(h => {
+            const distance = getDistance(currentLat, currentLng, h.lat, h.lng);
+            if (distance <= 50) {
+              alert(`Caution! ${h.type.toUpperCase()} ahead within ${distance.toFixed(1)} meters.`);
+            }
+          });
+        }, err => console.warn(err), {
+          enableHighAccuracy: true,
+          maximumAge: 0,
+          timeout: 5000
+        });
+      }
+    }
+
+    function getDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371e3;
+      const φ1 = lat1 * Math.PI / 180;
+      const φ2 = lat2 * Math.PI / 180;
+      const Δφ = (lat2 - lat1) * Math.PI / 180;
+      const Δλ = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                Math.cos(φ1) * Math.cos(φ2) *
+                Math.sin(Δλ/2) * Math.sin(Δλ/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c; // in meters
     }
 
     setupAutocomplete('start', 'start-suggestions');
