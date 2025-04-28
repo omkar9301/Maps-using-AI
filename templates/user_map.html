@@ -13,7 +13,7 @@
       font-family: 'Roboto', sans-serif;
       overflow: hidden;
     }
-  
+
     #map {
       position: absolute;
       top: 0;
@@ -22,7 +22,7 @@
       width: 100%;
       z-index: 0;
     }
-  
+
     #routeForm {
       position: absolute;
       top: 20px;
@@ -39,7 +39,7 @@
       max-width: 700px;
       width: 90%;
     }
-  
+
     #routeForm input {
       flex: 1;
       border: none;
@@ -48,7 +48,7 @@
       border-radius: 20px;
       background: #f1f3f4;
     }
-  
+
     #routeForm button {
       background: #4285F4;
       color: white;
@@ -59,11 +59,11 @@
       cursor: pointer;
       transition: background 0.3s;
     }
-  
+
     #routeForm button:hover {
       background: #3367d6;
     }
-  
+
     .autocomplete-suggestions {
       position: absolute;
       top: 60px;
@@ -76,25 +76,18 @@
       overflow-y: auto;
       z-index: 1000;
     }
-  
+
     .autocomplete-suggestions div {
       padding: 10px;
       cursor: pointer;
     }
-  
+
     .autocomplete-suggestions div:hover {
       background-color: #f1f1f1;
     }
   </style>
-  
-  
 </head>
 <body>
-  <nav>
-    Smart Road Safety
-  </nav>
-  
-  <h3>Route with Hazards & Your Location</h3>
 
   <form id="routeForm" autocomplete="off">
     <div style="position:relative;">
@@ -120,14 +113,11 @@
     let journeyStarted = false;
     let liveMarker;
 
-    const apiKey = "5b3ce3597851110001cf6248d8549b2641fe4b03a6b7c5b9cfed6757";
+    const apiKey = "5b3ce3597851110001cf6248d8549b2641fe4b03a6b7c5b9cfed6757"; // Your OpenRouteService API Key
 
     function initMap() {
       map = L.map('map').setView([userLat, userLng], 13);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-
-      const userMarker = L.marker([userLat, userLng], { title: "You are here" }).addTo(map);
-      userMarker.bindPopup("<b>You are here</b>").openPopup();
 
       fetch('/api/hazards')
         .then(res => res.json())
@@ -192,56 +182,100 @@
     }
 
     function getRoute(startCoord, endCoord) {
-  const url = 'https://api.openrouteservice.org/v2/directions/driving-car/geojson';
+      const url = 'https://api.openrouteservice.org/v2/directions/driving-car/geojson';
 
-  fetch(url, {
-    method: 'POST',
-    headers: {
-      'Authorization': apiKey,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      coordinates: [startCoord, endCoord]
-    })
-  })
-  .then(response => {
-    if (!response.ok) throw new Error("Route fetch failed.");
-    return response.json();
-  })
-  .then(data => {
-    if (!data.features || !data.features[0]) {
-      alert("No route found.");
-      return;
+      fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': apiKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ coordinates: [startCoord, endCoord] })
+      })
+      .then(response => {
+        if (!response.ok) throw new Error("Route fetch failed.");
+        return response.json();
+      })
+      .then(data => {
+        if (!data.features || !data.features[0]) {
+          alert("No route found.");
+          return;
+        }
+
+        const coords = data.features[0].geometry.coordinates.map(c => [c[1], c[0]]);
+        if (routeLayer) map.removeLayer(routeLayer);
+        routeLayer = L.polyline(coords, { color: 'blue', weight: 5 }).addTo(map);
+        map.fitBounds(routeLayer.getBounds());
+
+        // Add Start and End markers
+        const startIcon = L.icon({
+          iconUrl: 'https://maps.google.com/mapfiles/ms/icons/green-dot.png',
+          iconSize: [32, 32],
+          iconAnchor: [16, 32],
+        });
+
+        const endIcon = L.icon({
+          iconUrl: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png',
+          iconSize: [32, 32],
+          iconAnchor: [16, 32],
+        });
+
+        L.marker([startCoord[1], startCoord[0]], { icon: startIcon }).addTo(map).bindPopup("Start Point");
+        L.marker([endCoord[1], endCoord[0]], { icon: endIcon }).addTo(map).bindPopup("End Point");
+      })
+      .catch(err => {
+        console.error("Routing error:", err);
+        alert("Failed to fetch route. Check console for details.");
+      });
     }
 
-    const coords = data.features[0].geometry.coordinates.map(c => [c[1], c[0]]);
-    if (routeLayer) map.removeLayer(routeLayer);
-    routeLayer = L.polyline(coords, { color: 'blue', weight: 5 }).addTo(map);
-    map.fitBounds(routeLayer.getBounds());
+    function trackPosition() {
+      if (navigator.geolocation && journeyStarted) {
+        navigator.geolocation.watchPosition(pos => {
+          const currentLat = pos.coords.latitude;
+          const currentLng = pos.coords.longitude;
 
-    // Add Start and End markers
-    const startIcon = L.icon({
-      iconUrl: 'https://maps.google.com/mapfiles/ms/icons/green-dot.png',
-      iconSize: [32, 32],
-      iconAnchor: [16, 32],
-    });
+          if (!liveMarker) {
+            liveMarker = L.circleMarker([currentLat, currentLng], {
+              radius: 8,
+              fillColor: "#4285F4",
+              color: "#ffffff",
+              weight: 2,
+              opacity: 1,
+              fillOpacity: 1
+            }).addTo(map);
+          } else {
+            liveMarker.setLatLng([currentLat, currentLng]);
+          }
 
-    const endIcon = L.icon({
-      iconUrl: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png',
-      iconSize: [32, 32],
-      iconAnchor: [16, 32],
-    });
+          map.panTo([currentLat, currentLng], { animate: true, duration: 1.0 });
 
-    L.marker([startCoord[1], startCoord[0]], { icon: startIcon }).addTo(map).bindPopup("Start Point").openPopup();
-    L.marker([endCoord[1], endCoord[0]], { icon: endIcon }).addTo(map).bindPopup("End Point");
+          hazardMarkers.forEach(h => {
+            const distance = getDistance(currentLat, currentLng, h.lat, h.lng);
+            if (distance <= 50) {
+              alert(`Caution! ${h.type.toUpperCase()} ahead within ${distance.toFixed(1)} meters.`);
+            }
+          });
+        }, err => console.warn(err), {
+          enableHighAccuracy: true,
+          maximumAge: 0,
+          timeout: 5000
+        });
+      }
+    }
 
-  })
-  .catch(err => {
-    console.error("Routing error:", err);
-    alert("Failed to fetch route. Check console for details.");
-  });
-}
-
+    function getDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371e3;
+      const φ1 = lat1 * Math.PI / 180;
+      const φ2 = lat2 * Math.PI / 180;
+      const Δφ = (lat2 - lat1) * Math.PI / 180;
+      const Δλ = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                Math.cos(φ1) * Math.cos(φ2) *
+                Math.sin(Δλ/2) * Math.sin(Δλ/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c;
+    }
 
     function setupAutocomplete(inputId, suggestionId) {
       const input = document.getElementById(inputId);
@@ -285,59 +319,9 @@
       });
     }
 
-    function trackPosition() {
-    if (navigator.geolocation && journeyStarted) {
-      navigator.geolocation.watchPosition(pos => {
-        const currentLat = pos.coords.latitude;
-        const currentLng = pos.coords.longitude;
-
-        // Create a small blue circle for the user location
-        if (!liveMarker) {
-          liveMarker = L.circleMarker([currentLat, currentLng], {
-            radius: 8,
-            fillColor: "#4285F4",
-            color: "#ffffff",
-            weight: 2,
-            opacity: 1,
-            fillOpacity: 1
-          }).addTo(map);
-        } else {
-          liveMarker.setLatLng([currentLat, currentLng]);
-        }
-
-        // Smooth animated panning to current location
-        map.panTo([currentLat, currentLng], { animate: true, duration: 1.0 });
-
-        hazardMarkers.forEach(h => {
-          const distance = getDistance(currentLat, currentLng, h.lat, h.lng);
-          if (distance <= 50) {
-            alert(`Caution! ${h.type.toUpperCase()} ahead within ${distance.toFixed(1)} meters.`);
-          }
-        });
-      }, err => console.warn(err), {
-        enableHighAccuracy: true,
-        maximumAge: 0,
-        timeout: 5000
-      });
-    }
-  }
-
-
-    function getDistance(lat1, lon1, lat2, lon2) {
-      const R = 6371e3;
-      const φ1 = lat1 * Math.PI / 180;
-      const φ2 = lat2 * Math.PI / 180;
-      const Δφ = (lat2 - lat1) * Math.PI / 180;
-      const Δλ = (lon2 - lon1) * Math.PI / 180;
-      const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-                Math.cos(φ1) * Math.cos(φ2) *
-                Math.sin(Δλ/2) * Math.sin(Δλ/2);
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-      return R * c;
-    }
-
     setupAutocomplete('start', 'start-suggestions');
     setupAutocomplete('end', 'end-suggestions');
+
   </script>
 </body>
 </html>
