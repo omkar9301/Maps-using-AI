@@ -65,7 +65,6 @@
       background-color: #3367d6;
     }
 
-    /* Autocomplete Suggestions - floating */
     .autocomplete-suggestions {
       position: absolute;
       background: white;
@@ -100,6 +99,25 @@
       z-index: 1000;
       font-size: 16px;
     }
+
+    /* Center My Location Button */
+    #centerBtn {
+      position: absolute;
+      bottom: 100px;
+      right: 20px;
+      background: #4285F4;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      font-size: 24px;
+      text-align: center;
+      line-height: 50px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      cursor: pointer;
+      z-index: 1001;
+    }
   </style>
 </head>
 <body>
@@ -122,14 +140,19 @@
 
   <button type="submit">Get Route</button>
   <button type="button" id="startJourney">Start Journey</button>
+  <button type="button" id="stopJourney">Stop Journey</button>
 </form>
 
 <!-- Floating Suggestion Boxes -->
 <div id="start-suggestions" class="autocomplete-suggestions"></div>
 <div id="end-suggestions" class="autocomplete-suggestions"></div>
 
+<!-- Map and Info -->
 <div id="map"></div>
 <div id="infoBox"></div>
+
+<!-- Center My Location Button -->
+<button id="centerBtn">📍</button>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
@@ -139,7 +162,16 @@ let userLat = 19.0760, userLng = 72.8777;
 let routeLayer;
 let hazardMarkers = [];
 let journeyStarted = false;
+let journeyWatcher = null;
 let liveMarker;
+let nextInstructionIndex = 0;
+let routeCoordinates = [];
+let navigationInstructions = []; // NEW for voice navigation
+let travelledPath = null;
+let travelledCoordinates = []; // NEW for green path
+let journeyStartTime = null;
+let totalDistanceTravelled = 0; // meters
+
 
 const apiKey = "5b3ce3597851110001cf6248d8549b2641fe4b03a6b7c5b9cfed6757";
 
@@ -190,9 +222,26 @@ document.getElementById('routeForm').addEventListener('submit', function(e) {
 });
 
 document.getElementById('startJourney').addEventListener('click', () => {
+  if (journeyStarted) return;
   journeyStarted = true;
+  journeyStartTime = new Date(); // Start time
+  travelledCoordinates = []; // Reset
+  totalDistanceTravelled = 0; // Reset
+  nextInstructionIndex = 0;
   alert("Journey started! You will be alerted near hazards.");
   trackPosition();
+});
+
+
+document.getElementById('stopJourney').addEventListener('click', () => {
+  if (!journeyStarted) return;
+  showJourneySummary();
+  stopJourney();
+});
+
+
+document.getElementById('centerBtn').addEventListener('click', () => {
+  map.setView([userLat, userLng], 15);
 });
 
 function geocode(place) {
@@ -207,6 +256,8 @@ function geocode(place) {
       return null;
     });
 }
+
+
 
 function getRoute(startCoord, endCoord) {
   const mode = document.getElementById('travelMode').value;
@@ -227,9 +278,23 @@ function getRoute(startCoord, endCoord) {
       return;
     }
 
-    const coords = data.features[0].geometry.coordinates.map(c => [c[1], c[0]]);
+    // Save route geometry
+    routeCoordinates = data.features[0].geometry.coordinates.map(c => [c[1], c[0]]);
+    navigationInstructions = []; // Clear old instructions
+
+    if (data.features[0].properties.segments) {
+      data.features[0].properties.segments[0].steps.forEach(step => {
+        navigationInstructions.push({
+          instruction: step.instruction,
+          lat: step.way_points[0] ? routeCoordinates[step.way_points[0]][0] : null,
+          lng: step.way_points[0] ? routeCoordinates[step.way_points[0]][1] : null,
+          distance: step.distance
+        });
+      });
+    }
+
     if (routeLayer) map.removeLayer(routeLayer);
-    routeLayer = L.polyline(coords, { color: 'blue', weight: 5 }).addTo(map);
+    routeLayer = L.polyline(routeCoordinates, { color: 'blue', weight: 5 }).addTo(map);
     map.fitBounds(routeLayer.getBounds());
   })
   .catch(err => {
@@ -238,13 +303,19 @@ function getRoute(startCoord, endCoord) {
   });
 }
 
+
+
+
 function trackPosition() {
   if (navigator.geolocation && journeyStarted) {
-    navigator.geolocation.watchPosition(pos => {
+    journeyWatcher = navigator.geolocation.watchPosition(pos => {
       const currentLat = pos.coords.latitude;
       const currentLng = pos.coords.longitude;
       const speed = pos.coords.speed ? (pos.coords.speed * 3.6).toFixed(1) : 0;
       const heading = pos.coords.heading !== null ? pos.coords.heading.toFixed(0) : 'Unknown';
+
+      userLat = currentLat;
+      userLng = currentLng;
 
       if (!liveMarker) {
         liveMarker = L.circleMarker([currentLat, currentLng], {
@@ -266,6 +337,21 @@ function trackPosition() {
         Heading: ${heading}°
       `;
 
+      // Live Green Progress Line
+      travelledCoordinates.push([currentLat, currentLng]);
+
+      // Calculate distance travelled
+      if (travelledCoordinates.length > 1) {
+        const lastCoord = travelledCoordinates[travelledCoordinates.length - 2];
+        totalDistanceTravelled += getDistance(lastCoord[0], lastCoord[1], currentLat, currentLng);
+      }
+
+      if (travelledPath) {
+        map.removeLayer(travelledPath);
+      }
+      travelledPath = L.polyline(travelledCoordinates, { color: 'green', weight: 5 }).addTo(map);
+
+      // Hazard Alerts
       hazardMarkers.forEach(h => {
         const distance = getDistance(currentLat, currentLng, h.lat, h.lng);
         if (distance <= 50) {
@@ -273,13 +359,44 @@ function trackPosition() {
         }
       });
 
+      // Voice Navigation based on instructions
+      if (nextInstructionIndex < navigationInstructions.length) {
+        const instr = navigationInstructions[nextInstructionIndex];
+        const distanceToInstr = getDistance(currentLat, currentLng, instr.lat, instr.lng);
+
+        if (distanceToInstr <= 200 && !instr.announced) { // NEW: Announce EARLY at 200m
+          speak(`In ${Math.round(distanceToInstr)} meters, ${instr.instruction}`);
+          instr.announced = true; // Mark as announced once
+        }
+
+        if (distanceToInstr <= 30) { // Actually close to turn
+          nextInstructionIndex++;
+        }
+      }
+
+      // Check if user reached destination
+      if (routeCoordinates.length > 0) {
+        const destination = routeCoordinates[routeCoordinates.length - 1]; // Last point
+        const distanceToDestination = getDistance(currentLat, currentLng, destination[0], destination[1]);
+        if (distanceToDestination <= 30) {
+          speak("You have reached your destination.");
+          showJourneySummary();
+          stopJourney();
+        }
+
+      }
+
+
     }, err => console.warn(err), {
       enableHighAccuracy: true,
       maximumAge: 0,
       timeout: 5000
     });
+
+
   }
 }
+
 
 function speak(message) {
   const speech = new SpeechSynthesisUtterance(message);
@@ -314,7 +431,6 @@ function setupAutocomplete(inputId, suggestionId) {
       return;
     }
 
-    // Get input position on screen
     const rect = input.getBoundingClientRect();
     suggestionBox.style.left = `${rect.left}px`;
     suggestionBox.style.top = `${rect.bottom + window.scrollY + 5}px`;
@@ -353,7 +469,28 @@ function setupAutocomplete(inputId, suggestionId) {
   });
 }
 
-// Activate Autocomplete
+function stopJourney() {
+  journeyStarted = false;
+  if (journeyWatcher !== null) {
+    navigator.geolocation.clearWatch(journeyWatcher);
+    journeyWatcher = null;
+  }
+  alert("Journey stopped.");
+}
+
+function showJourneySummary() {
+  const journeyEndTime = new Date();
+  const timeTakenMs = journeyEndTime - journeyStartTime;
+  const timeTakenMinutes = (timeTakenMs / 60000).toFixed(1);
+  const distanceKm = (totalDistanceTravelled / 1000).toFixed(2);
+  const avgSpeed = (distanceKm / (timeTakenMinutes/60)).toFixed(1);
+
+  alert(`Journey Summary:
+Total Distance: ${distanceKm} km
+Total Time: ${timeTakenMinutes} minutes
+Average Speed: ${avgSpeed} km/h`);
+}
+
 setupAutocomplete('start', 'start-suggestions');
 setupAutocomplete('end', 'end-suggestions');
 </script>
