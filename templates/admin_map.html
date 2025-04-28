@@ -3,47 +3,213 @@
 <head>
   <title>Admin Hazard Entry</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet">
+
   <style>
-    #map { height: 95vh; width: 100%; }
+    body, html {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      font-family: 'Roboto', sans-serif;
+      background: #f0f2f5;
+    }
+
+    #map {
+      height: 90vh;
+      width: 100%;
+      z-index: 0;
+    }
+
+    h3 {
+      text-align: center;
+      margin: 10px;
+      font-size: 24px;
+      color: #333;
+    }
+
+    #dashboard {
+      background: white;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      padding: 10px 20px;
+      margin: 10px auto;
+      border-radius: 12px;
+      max-width: 600px;
+      font-size: 16px;
+      display: flex;
+      justify-content: space-around;
+    }
+
+    .leaflet-popup-content form {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      font-size: 14px;
+    }
+
+    .leaflet-popup-content form select,
+    .leaflet-popup-content form input {
+      padding: 8px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      outline: none;
+      font-size: 14px;
+      width: 100%;
+    }
+
+    .leaflet-popup-content form button {
+      padding: 10px;
+      background: #4285F4;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 16px;
+      transition: background 0.3s ease;
+    }
+
+    .leaflet-popup-content form button:hover {
+      background: #3367d6;
+    }
+
+    /* Toast Notification */
+    #toast {
+      visibility: hidden;
+      min-width: 250px;
+      margin-left: -125px;
+      background-color: #333;
+      color: #fff;
+      text-align: center;
+      border-radius: 8px;
+      padding: 16px;
+      position: fixed;
+      z-index: 9999;
+      left: 50%;
+      bottom: 30px;
+      font-size: 17px;
+      opacity: 0;
+      transition: opacity 0.5s, bottom 0.5s;
+    }
+    #toast.show {
+      visibility: visible;
+      opacity: 1;
+      bottom: 50px;
+    }
   </style>
 </head>
+
 <body>
-  <h3>Click on the map to add a road hazard</h3>
+
+  <h3>Admin Hazard Entry Panel</h3>
+  <div id="dashboard">
+    <div><b>Total Hazards:</b> <span id="totalCount">0</span></div>
+    <div><b>Potholes:</b> <span id="potholeCount">0</span></div>
+    <div><b>Speed Breakers:</b> <span id="speedBreakerCount">0</span></div>
+    <div><b>Accident Zones:</b> <span id="accidentZoneCount">0</span></div>
+    <div><b>Roadblocks:</b> <span id="roadblockCount">0</span></div>
+  </div>
+
   <div id="map"></div>
+
+  <div id="toast">Hazard Saved Successfully!</div>
+
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
+
   <script>
     window.onload = function () {
       const map = L.map('map').setView([19.0760, 72.8777], 14);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-      // Load existing hazards and add markers
+      const markers = L.markerClusterGroup(); // Marker clustering
+
+      const hazardIcons = {
+        pothole: new L.Icon({
+          iconUrl: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png',
+          iconSize: [32, 32],
+          iconAnchor: [16, 32],
+          popupAnchor: [0, -32],
+        }),
+        speed_breaker: new L.Icon({
+          iconUrl: 'https://maps.google.com/mapfiles/ms/icons/yellow-dot.png',
+          iconSize: [32, 32],
+          iconAnchor: [16, 32],
+          popupAnchor: [0, -32],
+        }),
+        accident_zone: new L.Icon({
+          iconUrl: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png',
+          iconSize: [32, 32],
+          iconAnchor: [16, 32],
+          popupAnchor: [0, -32],
+        }),
+        roadblock: new L.Icon({
+          iconUrl: 'https://maps.google.com/mapfiles/ms/icons/orange-dot.png',
+          iconSize: [32, 32],
+          iconAnchor: [16, 32],
+          popupAnchor: [0, -32],
+        })
+      };
+
+      let counts = {
+        total: 0,
+        pothole: 0,
+        speed_breaker: 0,
+        accident_zone: 0,
+        roadblock: 0
+      };
+
+      function updateDashboard() {
+        document.getElementById('totalCount').innerText = counts.total;
+        document.getElementById('potholeCount').innerText = counts.pothole;
+        document.getElementById('speedBreakerCount').innerText = counts.speed_breaker;
+        document.getElementById('accidentZoneCount').innerText = counts.accident_zone;
+        document.getElementById('roadblockCount').innerText = counts.roadblock;
+      }
+
+      // Load existing hazards
       fetch('/api/hazards')
         .then(res => res.json())
         .then(hazards => {
           hazards.forEach(h => {
-            const marker = L.marker([h.lat, h.lng]).addTo(map);
+            const icon = hazardIcons[h.type] || hazardIcons['pothole'];
+            const marker = L.marker([h.lat, h.lng], { icon });
             marker.bindPopup(`<b>${h.type.toUpperCase()}</b><br>Severity: ${h.severity}`);
+            markers.addLayer(marker);
+
+            counts.total++;
+            if (counts[h.type] !== undefined) {
+              counts[h.type]++;
+            }
           });
+          map.addLayer(markers);
+          updateDashboard();
         });
 
-      // Allow admin to click and add new hazard
+      // Admin click to add hazard
       map.on('click', function(e) {
         const lat = e.latlng.lat;
         const lng = e.latlng.lng;
         const formHtml = `
           <form onsubmit="submitHazard(event, ${lat}, ${lng})">
-            Type: <select id="type">
+            <label>Type:</label>
+            <select id="type" required>
               <option value="pothole">Pothole</option>
               <option value="speed_breaker">Speed Breaker</option>
-            </select><br>
-            Severity: <input id="severity" type="text" required><br>
-            <button type="submit">Save</button>
+              <option value="accident_zone">Accident Zone</option>
+              <option value="roadblock">Roadblock</option>
+            </select>
+
+            <label>Severity:</label>
+            <input id="severity" type="text" placeholder="e.g. Moderate" required>
+
+            <button type="submit">Save Hazard</button>
           </form>
         `;
         L.popup().setLatLng([lat, lng]).setContent(formHtml).openOn(map);
       });
 
-      // Submit new hazard to backend
+      // Save hazard to server
       window.submitHazard = function(e, lat, lng) {
         e.preventDefault();
         const type = document.getElementById('type').value;
@@ -56,11 +222,62 @@
         })
         .then(res => res.json())
         .then(data => {
-          alert("Hazard saved!");
-          location.reload();
+          // Toast
+          showToast("Hazard Saved Successfully!");
+
+          // Live add marker
+          const icon = hazardIcons[type] || hazardIcons['pothole'];
+          const marker = L.marker([lat, lng], { icon }).addTo(map);
+          marker.bindPopup(`<b>${type.toUpperCase()}</b><br>Severity: ${severity}`);
+
+          // Add to cluster
+          markers.addLayer(marker);
+
+          // Bounce animation
+          bounceMarker(marker);
+
+          // Update counts
+          counts.total++;
+          if (counts[type] !== undefined) {
+            counts[type]++;
+          }
+          updateDashboard();
+
+          map.closePopup();
         });
       };
+
+      function showToast(message) {
+        const toast = document.getElementById("toast");
+        toast.innerText = message;
+        toast.className = "show";
+        setTimeout(() => {
+          toast.className = toast.className.replace("show", "");
+        }, 3000);
+      }
+
+      function bounceMarker(marker) {
+        marker._icon.classList.add('leaflet-marker-bounce');
+        setTimeout(() => {
+          marker._icon.classList.remove('leaflet-marker-bounce');
+        }, 1500);
+      }
     };
   </script>
+
+  <style>
+    /* Simple bounce animation */
+    @keyframes bounce {
+      0% { transform: translateY(0); }
+      30% { transform: translateY(-20px); }
+      50% { transform: translateY(0); }
+      80% { transform: translateY(-10px); }
+      100% { transform: translateY(0); }
+    }
+    .leaflet-marker-bounce {
+      animation: bounce 1s ease;
+    }
+  </style>
+
 </body>
 </html>
