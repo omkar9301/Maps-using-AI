@@ -286,32 +286,42 @@
     }
 
     function trackPosition() {
-      if (navigator.geolocation && journeyStarted) {
-        navigator.geolocation.watchPosition(pos => {
-          const currentLat = pos.coords.latitude;
-          const currentLng = pos.coords.longitude;
+    if (navigator.geolocation && journeyStarted) {
+      navigator.geolocation.watchPosition(pos => {
+        const currentLat = pos.coords.latitude;
+        const currentLng = pos.coords.longitude;
 
-          if (!liveMarker) {
-            liveMarker = L.marker([currentLat, currentLng], { title: "Live Location" }).addTo(map);
-          } else {
-            liveMarker.setLatLng([currentLat, currentLng]);
+        // Create a small blue circle for the user location
+        if (!liveMarker) {
+          liveMarker = L.circleMarker([currentLat, currentLng], {
+            radius: 8,
+            fillColor: "#4285F4",
+            color: "#ffffff",
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 1
+          }).addTo(map);
+        } else {
+          liveMarker.setLatLng([currentLat, currentLng]);
+        }
+
+        // Smooth animated panning to current location
+        map.panTo([currentLat, currentLng], { animate: true, duration: 1.0 });
+
+        hazardMarkers.forEach(h => {
+          const distance = getDistance(currentLat, currentLng, h.lat, h.lng);
+          if (distance <= 50) {
+            alert(`Caution! ${h.type.toUpperCase()} ahead within ${distance.toFixed(1)} meters.`);
           }
-
-          map.setView([currentLat, currentLng]);
-
-          hazardMarkers.forEach(h => {
-            const distance = getDistance(currentLat, currentLng, h.lat, h.lng);
-            if (distance <= 50) {
-              alert(`Caution! ${h.type.toUpperCase()} ahead within ${distance.toFixed(1)} meters.`);
-            }
-          });
-        }, err => console.warn(err), {
-          enableHighAccuracy: true,
-          maximumAge: 0,
-          timeout: 5000
         });
-      }
+      }, err => console.warn(err), {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: 5000
+      });
     }
+  }
+
 
     function getDistance(lat1, lon1, lat2, lon2) {
       const R = 6371e3;
