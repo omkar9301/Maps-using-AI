@@ -49,6 +49,7 @@
     let routeLayer;
     let hazardMarkers = [];
     let journeyStarted = false;
+    let liveMarker;
 
     const apiKey = "5b3ce3597851110001cf6248d8549b2641fe4b03a6b7c5b9cfed6757";
 
@@ -122,38 +123,56 @@
     }
 
     function getRoute(startCoord, endCoord) {
-      const url = 'https://api.openrouteservice.org/v2/directions/driving-car/geojson';
+  const url = 'https://api.openrouteservice.org/v2/directions/driving-car/geojson';
 
-      fetch(url, {
-        method: 'POST',
-        headers: {
-          'Authorization': apiKey,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          coordinates: [startCoord, endCoord]
-        })
-      })
-      .then(response => {
-        if (!response.ok) throw new Error("Route fetch failed.");
-        return response.json();
-      })
-      .then(data => {
-        if (!data.features || !data.features[0]) {
-          alert("No route found.");
-          return;
-        }
-
-        const coords = data.features[0].geometry.coordinates.map(c => [c[1], c[0]]);
-        if (routeLayer) map.removeLayer(routeLayer);
-        routeLayer = L.polyline(coords, { color: 'blue', weight: 5 }).addTo(map);
-        map.fitBounds(routeLayer.getBounds());
-      })
-      .catch(err => {
-        console.error("Routing error:", err);
-        alert("Failed to fetch route. Check console for details.");
-      });
+  fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': apiKey,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      coordinates: [startCoord, endCoord]
+    })
+  })
+  .then(response => {
+    if (!response.ok) throw new Error("Route fetch failed.");
+    return response.json();
+  })
+  .then(data => {
+    if (!data.features || !data.features[0]) {
+      alert("No route found.");
+      return;
     }
+
+    const coords = data.features[0].geometry.coordinates.map(c => [c[1], c[0]]);
+    if (routeLayer) map.removeLayer(routeLayer);
+    routeLayer = L.polyline(coords, { color: 'blue', weight: 5 }).addTo(map);
+    map.fitBounds(routeLayer.getBounds());
+
+    // Add Start and End markers
+    const startIcon = L.icon({
+      iconUrl: 'https://maps.google.com/mapfiles/ms/icons/green-dot.png',
+      iconSize: [32, 32],
+      iconAnchor: [16, 32],
+    });
+
+    const endIcon = L.icon({
+      iconUrl: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png',
+      iconSize: [32, 32],
+      iconAnchor: [16, 32],
+    });
+
+    L.marker([startCoord[1], startCoord[0]], { icon: startIcon }).addTo(map).bindPopup("Start Point").openPopup();
+    L.marker([endCoord[1], endCoord[0]], { icon: endIcon }).addTo(map).bindPopup("End Point");
+
+  })
+  .catch(err => {
+    console.error("Routing error:", err);
+    alert("Failed to fetch route. Check console for details.");
+  });
+}
+
 
     function setupAutocomplete(inputId, suggestionId) {
       const input = document.getElementById(inputId);
@@ -203,6 +222,14 @@
           const currentLat = pos.coords.latitude;
           const currentLng = pos.coords.longitude;
 
+          if (!liveMarker) {
+            liveMarker = L.marker([currentLat, currentLng], { title: "Live Location" }).addTo(map);
+          } else {
+            liveMarker.setLatLng([currentLat, currentLng]);
+          }
+
+          map.setView([currentLat, currentLng]);
+
           hazardMarkers.forEach(h => {
             const distance = getDistance(currentLat, currentLng, h.lat, h.lng);
             if (distance <= 50) {
@@ -227,7 +254,7 @@
                 Math.cos(φ1) * Math.cos(φ2) *
                 Math.sin(Δλ/2) * Math.sin(Δλ/2);
       const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-      return R * c; // in meters
+      return R * c;
     }
 
     setupAutocomplete('start', 'start-suggestions');
