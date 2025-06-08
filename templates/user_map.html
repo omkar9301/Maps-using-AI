@@ -257,8 +257,6 @@ function geocode(place) {
     });
 }
 
-
-
 function getRoute(startCoord, endCoord) {
   const mode = document.getElementById('travelMode').value;
   const url = `https://api.openrouteservice.org/v2/directions/${mode}/geojson`;
@@ -278,9 +276,15 @@ function getRoute(startCoord, endCoord) {
       return;
     }
 
-    // Save route geometry
+    // ✅ Calculate and display total distance
+    const distanceMeters = data.features[0].properties.segments[0].distance;
+    const distanceKm = (distanceMeters / 1000).toFixed(2);
+    document.getElementById("infoBox").setAttribute("data-distance", distanceKm);
+    updateInfoBox();  // trigger display
+
+    // ✅ Save route geometry
     routeCoordinates = data.features[0].geometry.coordinates.map(c => [c[1], c[0]]);
-    navigationInstructions = []; // Clear old instructions
+    navigationInstructions = [];
 
     if (data.features[0].properties.segments) {
       data.features[0].properties.segments[0].steps.forEach(step => {
@@ -296,14 +300,13 @@ function getRoute(startCoord, endCoord) {
     if (routeLayer) map.removeLayer(routeLayer);
     routeLayer = L.polyline(routeCoordinates, { color: 'blue', weight: 5 }).addTo(map);
     map.fitBounds(routeLayer.getBounds());
+
   })
   .catch(err => {
     console.error("Routing error:", err);
     alert("Failed to fetch route. Check console for details.");
   });
 }
-
-
 
 
 function trackPosition() {
@@ -332,15 +335,13 @@ function trackPosition() {
 
       map.panTo([currentLat, currentLng], { animate: true, duration: 1.0 });
 
-      document.getElementById('infoBox').innerHTML = `
-        Speed: ${speed} km/h<br>
-        Heading: ${heading}°
-      `;
+      // Store for update
+      liveSpeed = speed;
+      liveHeading = heading;
+      updateInfoBox();
 
-      // Live Green Progress Line
       travelledCoordinates.push([currentLat, currentLng]);
 
-      // Calculate distance travelled
       if (travelledCoordinates.length > 1) {
         const lastCoord = travelledCoordinates[travelledCoordinates.length - 2];
         totalDistanceTravelled += getDistance(lastCoord[0], lastCoord[1], currentLat, currentLng);
@@ -351,7 +352,6 @@ function trackPosition() {
       }
       travelledPath = L.polyline(travelledCoordinates, { color: 'green', weight: 5 }).addTo(map);
 
-      // Hazard Alerts
       hazardMarkers.forEach(h => {
         const distance = getDistance(currentLat, currentLng, h.lat, h.lng);
         if (distance <= 50) {
@@ -359,42 +359,47 @@ function trackPosition() {
         }
       });
 
-      // Voice Navigation based on instructions
       if (nextInstructionIndex < navigationInstructions.length) {
         const instr = navigationInstructions[nextInstructionIndex];
         const distanceToInstr = getDistance(currentLat, currentLng, instr.lat, instr.lng);
-
-        if (distanceToInstr <= 200 && !instr.announced) { // NEW: Announce EARLY at 200m
+        if (distanceToInstr <= 200 && !instr.announced) {
           speak(`In ${Math.round(distanceToInstr)} meters, ${instr.instruction}`);
-          instr.announced = true; // Mark as announced once
+          instr.announced = true;
         }
-
-        if (distanceToInstr <= 30) { // Actually close to turn
+        if (distanceToInstr <= 30) {
           nextInstructionIndex++;
         }
       }
 
-      // Check if user reached destination
       if (routeCoordinates.length > 0) {
-        const destination = routeCoordinates[routeCoordinates.length - 1]; // Last point
+        const destination = routeCoordinates[routeCoordinates.length - 1];
         const distanceToDestination = getDistance(currentLat, currentLng, destination[0], destination[1]);
         if (distanceToDestination <= 30) {
           speak("You have reached your destination.");
           showJourneySummary();
           stopJourney();
         }
-
       }
-
 
     }, err => console.warn(err), {
       enableHighAccuracy: true,
       maximumAge: 0,
       timeout: 5000
     });
-
-
   }
+}
+
+let liveSpeed = 0;
+let liveHeading = 'Unknown';
+
+function updateInfoBox() {
+  const infoBox = document.getElementById('infoBox');
+  const routeDistance = infoBox.getAttribute("data-distance");
+  infoBox.innerHTML = `
+    ${routeDistance ? `Route Distance: ${routeDistance} km<br>` : ''}
+    Speed: ${liveSpeed} km/h<br>
+    Heading: ${liveHeading}°
+  `;
 }
 
 
