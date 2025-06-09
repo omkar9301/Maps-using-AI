@@ -27,5 +27,11 @@
     "lng": -6.344292206834644,
     "type": "accident_zone",
     "severity": "10"
+  },
+  {
+    "lat": 19.239713332942788,
+    "lng": 72.9706070647252,
+    "type": "roadblock",
+    "severity": "1 "
   }
 ]
