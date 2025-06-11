@@ -1,112 +1,135 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Admin Login</title>
-  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login | Road Safety Map</title>
+    <style>
+        body {
+            background-image: url("{{ url_for('static', filename='location-symbol-with-landscape-background.jpg') }}");
+            background-size: cover;
+            background-position: center;
+            font-family: 'Arial', sans-serif;
+            color: #fff;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            text-align: center;
+        }
 
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-    body, html {
-      height: 100%;
-      font-family: 'Roboto', sans-serif;
-      background: url('https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&w=1920&q=80') no-repeat center center fixed;
-      background-size: cover;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
+        .project-title {
+            font-size: 36px;
+            font-weight: bold;
+            margin-bottom: 30px;
+            text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.6);
+            color: #ffffff;
+        }
 
-    .overlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.4); /* Soft dark overlay */
-      z-index: 0;
-    }
+        .container {
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            max-width: 400px;
+            width: 100%;
+        }
 
-    .login-wrapper {
-      position: relative;
-      background: white;
-      padding: 40px 30px;
-      border-radius: 12px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-      width: 100%;
-      max-width: 360px;
-      text-align: center;
-      z-index: 1;
-    }
+        h1 {
+            margin-bottom: 20px;
+            font-size: 24px;
+            font-weight: bold;
+        }
 
-    .login-wrapper h2 {
-      margin-bottom: 25px;
-      font-weight: 500;
-      color: #333;
-    }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            text-align: left;
+        }
 
-    .login-wrapper input {
-      width: 100%;
-      padding: 12px 14px;
-      margin: 10px 0;
-      border: 1px solid #ccc;
-      border-radius: 8px;
-      font-size: 15px;
-      background: #f1f3f4;
-      transition: 0.3s;
-    }
+        input, select {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 20px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            background-color: rgba(255, 255, 255, 0.9);
+            color: #000;
+        }
 
-    .login-wrapper input:focus {
-      border: 1px solid #4285F4;
-      background: #fff;
-      outline: none;
-    }
+        input[type="submit"] {
+            background-color: #A0C89E;
+            color: #fff;
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s ease;
+            width: 80%;
+            margin: 0 auto;
+            display: block;
+        }
 
-    .login-wrapper button {
-      width: 100%;
-      margin-top: 20px;
-      padding: 12px;
-      background: #4285F4;
-      border: none;
-      border-radius: 8px;
-      color: #fff;
-      font-size: 16px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: background 0.3s;
-    }
+        input[type="submit"]:hover {
+            background-color: #86b583;
+        }
 
-    .login-wrapper button:hover {
-      background: #3367d6;
-    }
+        a {
+            color: #A0C89E;
+            display: block;
+            margin-top: 15px;
+            text-decoration: none;
+            font-weight: 500;
+        }
 
-    .login-footer {
-      margin-top: 20px;
-      font-size: 14px;
-      color: #666;
-    }
-  </style>
+        a:hover {
+            text-decoration: underline;
+        }
+
+        .flash {
+            color: #ff9999;
+            margin-bottom: 20px;
+        }
+    </style>
 </head>
-
 <body>
+    <!-- Project Title -->
+    <div class="project-title">Road Safety Map</div>
 
-  <div class="overlay"></div>
+    <div class="container">
+        <h1>Login</h1>
 
-  <div class="login-wrapper">
-    <h2>Login</h2>
-    <form action="/login" method="post" autocomplete="off">
-      <input type="text" name="username" placeholder="Username" required><br>
-      <input type="password" name="password" placeholder="Password" required><br>
-      <button type="submit">Login</button>
-    </form>
-    <div class="login-footer">
-      © 2024 Smart Road Safety
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            {% for message in messages %}
+              <div class="flash">{{ message }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="{{ url_for('login') }}">
+            <label for="username">Username:</label>
+            <input type="text" name="username" required>
+
+            <label for="password">Password:</label>
+            <input type="password" name="password" required>
+
+            <label for="role">Role:</label>
+            <select name="role" required>
+                <option value="">-- Select Role --</option>
+                <option value="admin">Admin</option>
+                <option value="user">User</option>
+            </select>
+
+            <input type="submit" value="Login">
+        </form>
+
+        <a href="{{ url_for('register') }}">Don't have an account? Register here.</a>
     </div>
-  </div>
-
 </body>
 </html>

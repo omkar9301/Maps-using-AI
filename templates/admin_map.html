@@ -96,12 +96,60 @@
       opacity: 1;
       bottom: 50px;
     }
+
+    #searchContainer {
+      position: relative;
+      width: 300px;
+      margin: 0 auto 10px auto;
+      z-index: 1001;
+    }
+
+    #searchBox {
+      padding: 10px;
+      width: 100%;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      font-size: 16px;
+      box-sizing: border-box;
+      z-index: 1001;
+    }
+
+    #suggestions {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: white;
+      border: 1px solid #ccc;
+      max-height: 200px;
+      overflow-y: auto;
+      border-radius: 0 0 8px 8px;
+      display: none;
+      z-index: 1001;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    #suggestions div {
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+
+    #suggestions div:hover {
+      background-color: #f0f0f0;
+    }
+
   </style>
 </head>
 
 <body>
 
   <h3>Admin Hazard Entry Panel</h3>
+  <div id="searchContainer">
+    <input type="text" id="searchBox" placeholder="Search Location">
+    <div id="suggestions"></div>
+  </div>
+
+
   <div id="dashboard">
     <div><b>Total Hazards:</b> <span id="totalCount">0</span></div>
     <div><b>Potholes:</b> <span id="potholeCount">0</span></div>
@@ -118,8 +166,10 @@
   <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
 
   <script>
+    let map; // Global
+
     window.onload = function () {
-      const map = L.map('map').setView([19.0760, 72.8777], 14);
+      map = L.map('map').setView([19.0760, 72.8777], 14);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
       const markers = L.markerClusterGroup(); // Marker clustering
@@ -263,6 +313,55 @@
         }, 1500);
       }
     };
+    
+    const searchBox = document.getElementById("searchBox");
+    const suggestions = document.getElementById("suggestions");
+
+    searchBox.addEventListener("input", () => {
+      const query = searchBox.value.trim();
+      if (query.length < 3) {
+        suggestions.style.display = "none";
+        return;
+      }
+
+      fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`)
+        .then(res => res.json())
+        .then(results => {
+          suggestions.innerHTML = "";
+          results.slice(0, 5).forEach(place => {
+            const div = document.createElement("div");
+            div.textContent = place.display_name;
+            div.style.padding = "8px";
+            div.style.cursor = "pointer";
+            div.addEventListener("click", () => {
+              searchBox.value = place.display_name;
+              suggestions.style.display = "none";
+
+              const lat = parseFloat(place.lat);
+              const lon = parseFloat(place.lon);
+
+              if (map) {
+                map.setView([lat, lon], 16, { animate: true });
+                L.popup()
+                  .setLatLng([lat, lon])
+                  .setContent(`<b>Location:</b><br>${place.display_name}`)
+                  .openOn(map);
+              } else {
+                console.error("Map not initialized yet.");
+              }
+            });
+            suggestions.appendChild(div);
+          });
+          suggestions.style.display = "block";
+        });
+    });
+
+    document.addEventListener("click", (e) => {
+      if (!searchBox.contains(e.target) && !suggestions.contains(e.target)) {
+        suggestions.style.display = "none";
+      }
+    });
+
   </script>
 
   <style>
@@ -277,6 +376,13 @@
     .leaflet-marker-bounce {
       animation: bounce 1s ease;
     }
+
+    #suggestions div:hover {
+      background-color: #f0f0f0;
+    }
+
+    
+
   </style>
 
 </body>
